@@ -1,5 +1,5 @@
-from pydb.base import *
-from pydb.base import _numtypes
+from pyDbs.base import *
+from pyDbs.base import _numtypes
 from copy import deepcopy
 import openpyxl,io
 
