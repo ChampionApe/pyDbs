@@ -1,2 +1,2 @@
-# _pyDatabases
-Basic database methods
+# pydb
+Basic database methods relying on pandas and scipy (for sparsity). 
