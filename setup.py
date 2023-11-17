@@ -5,7 +5,7 @@ with open("README.md", "r") as file:
 
 setuptools.setup(
   name="pyDbs",
-  version="0.0.1",
+  version="0.0.2",
   author="Rasmus K. Skjødt Berg",
   author_email="rasmus.kehlet.berg@econ.ku.dk",
   description="Custom database class (relies on pandas, scipy)",

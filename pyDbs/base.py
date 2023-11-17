@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from six import string_types
 _numtypes = (int,float,np.generic)
 _adj_admissable_types = (pd.Index, pd.Series, pd.DataFrame)
+_stdIndexNames = ('_symbol','_index')
 
 # Content:
 # 0. Small auxiliary functions
@@ -10,6 +11,7 @@ _adj_admissable_types = (pd.Index, pd.Series, pd.DataFrame)
 # 2. OrdSet: A small class that works like an ordered set.
 # 3. adj: A small class used to subset and adjust pandas-like symbols.
 # 4. adjMultiIndexDB, adjMultiIndex: A couple of classes that helps broadcasting pandas symbols defined over different indices.
+
 
 ### -------- 	0: Small, auxiliary functions    -------- ###
 def tryint(x):
@@ -43,6 +45,15 @@ def dictInit(key,df_val,kwargs):
 def is_iterable(arg):
 	return isinstance(arg, Iterable) and not isinstance(arg, string_types)
 
+def tryIte(x,i):
+	if not is_iterable(x):
+		return x
+	else:
+		try:
+			return x[i]
+		except KeyError:
+			return None
+
 def getIndex(symbol):
 	""" Defaults to None if no index is defined. """
 	if hasattr(symbol, 'index'):
@@ -67,7 +78,18 @@ def getDomains(x):
 def domains_vlist(vlist):
 	return OrdSet().union(*[OrdSet(getDomains(vi)) for vi in vlist]).v
 
-### -------- 	1. Cartesian produt index     -------- ###
+def sortAll(v, order = None):
+	return reorderStd(v, order=order).sort_index() if isinstance(v, (pd.Series, pd.DataFrame)) else v
+
+def reorderStd(v, order=None):
+	return v.reorder_levels(noneInit(order, sorted(getIndex(v).names))) if isinstance(getIndex(v), pd.MultiIndex) else v
+
+def setattrReturn(symbol,k,v):
+	symbol.__setattr__(k,v)
+	return symbol
+
+
+### -------- 	1. Cartesian product index     -------- ###
 def cartesianProductIndex(indices):
 	""" Return the cartesian product of pandas indices; assumes no overlap in levels of indices. """
 	if any((i.empty for i in indices)):
@@ -111,6 +133,142 @@ def pdGb(x, by):
 def pdSum(x,sumby):
 	return pdGb(x, sumby).sum() if isinstance(x.index, pd.MultiIndex) else sum(x)
 
+class SymMaps:
+	""" Navigate between collection of symbols defined over different indices and 1d representations of the same. """
+	def __init__(self, symbols = None, maps = None, iterAux = True):
+		""" symbols::: dict with keys = names of variable, values = pandas-like objects
+			mapp::: dict with keys = names of variables, values = pandas like-series with {index = original pandas index, value = corresponding linear index}
+		"""
+		self.symbols = symbols
+		self.maps = {}
+		self.auxMaps = {}
+		self.auxMapsIdx = {}
+		self.iterAux = iterAux
+
+	def __getitem__(self, item):
+		return (self.auxMaps | self.maps)[item]
+
+	def __iter__(self):
+		return iter(self.maps | self.auxMaps) if self.iterAux else iter(self.maps)
+
+	def __len__(self):
+		return len(self.maps | self.auxMaps) if self.iterAux else len(self.maps)
+
+	def __call__(self, x, name, **kwargs):
+		""" Subset x with index of variable 'name' using linear indexing from self.maps."""
+		return x[self[name]]
+
+	def get(self, x, name, **kwargs):
+		""" __call__ method, but returned as pandas object """
+		return pd.Series(x[self[name]], index = self[name].index)
+
+	def getr(self, x, name, **kwargs):
+		""" Like the get method, but more robust (adds more potential adjustments to the symbol) """
+		k = adj.rc_pd(self[name], **kwargs)
+		return pd.Series(x[k], index = k.index)
+
+	# def adjustedSymbol(self, symbols, roll = None, shift = None, shiftOptions = None, **kwargs):
+	# 	""" Define new symbol from main list; you may roll index levels, shift them, condition, or alias them. 
+	# 	symbols::: either string or iterator of strings that refer to objects in self.maps and self.symbols (or already in self.auxMaps)
+	# 	roll::: None, integer, or dict of integers with keys referring to the 'symbols'.
+	# 	shift::: None, integer, or dict of integers with keys reffering to the 'symbols'.
+	# 	"""
+
+	# def _adjustSymbol(self, symbol, roll = None, shift = None, **kwargs):
+	# 	x = self[symbol].copy()
+	# 	if roll:
+	# 		x.index = SymMaps.rollIndex(x.index, roll = roll)
+	# 		return adj.rc_pd(x, **kwargs)
+	# 	elif shift:
+	# 		return 0
+
+	def compile(self):
+		keys, vals = list(self.symbols.keys()), list(self.symbols.values())
+		steps = np.array([0]+[len(x) for x in vals]).cumsum()
+		self.maps = {keys[i]: pd.Series(range(steps[i], steps[i+1]), index = getIndex(vals[i])) for i in range(len(keys))}
+
+	def applyMapGlobalIdx(self, symbol, m):
+		return pd.Series(symbol[m.values].values, m.index)
+
+	def addSymFromMap(self, name, symbol, m):
+		self.auxMapsIdx[name] = m
+		self.auxMaps[name] = self.applyMapGlobalIdx(self[symbol], m)
+
+	def addLaggedSym(self, name, symbol, lags, **kwargs):
+		self.addSymFromMap(name, symbol, self.lagMaps(adj.rc_pd(self[symbol], **kwargs), lags))
+
+	def lagLevels(self, symbol, lags):
+		return self.applyMapGlobalIdx(symbol, self.lagLevels(symbol, lags))
+
+	def lagMaps(self, m, lags):
+		return self._lagMaps(m.index, lags) if isinstance(m.index, pd.MultiIndex) else self._lagMap(m.index, lags)
+
+	@staticmethod
+	def _lagMaps(idx, lags):
+		return pd.Series(idx.set_levels([SymMaps._lagLevelMap(idx, idx.names.index(level),lag) for level,lag in lags.items()], level = lags.keys()).values, index  = idx)
+
+	@staticmethod
+	def _lagLevelMap(idx, levelInt, lag):
+		return idx.levels[levelInt].map(SymMaps._lagMap(idx.levels[levelInt], lag))
+
+	@staticmethod
+	def _lagMap(idx, lag):
+		return pd.Series(idx-lag, index = idx)
+
+	def rollLevels(self, m, rolls):
+		""" m is a pd.Series e.g. from self.maps. 'rolls' is a dict with key = index level to roll and value = length of roll"""
+		m.index = m.index.map(self.rollMaps(m, rolls))
+		return m
+
+	def rollMaps(self, m, rolls):
+		return self._rollMaps(m.index, rolls) if isinstance(m.index, pd.MultiIndex) else self._rollMap(m.index, rolls)
+
+	@staticmethod
+	def _rollMaps(idx, rolls):
+		return pd.Series(idx.set_levels([SymMaps._rollLevelMap(idx, idx.names.index(level), roll) for level,roll in rolls.items()], level = rolls.keys()).values, index  = idx)
+
+	@staticmethod
+	def _rollLevelMap(idx, levelInt, roll):
+		return idx.levels[levelInt].map(SymMaps._rollMap(idx.levels[levelInt], roll))
+
+	@staticmethod
+	def _rollMap(idx, roll):
+		return pd.Series(np.roll(idx, roll), index = idx)
+
+	def shiftLevels(self, symbol, shifts, **kwargs):
+		return self.applyMapGlobalIdx(symbol, self.shiftMaps(symbol, shifts, **kwargs))
+
+	def shiftMaps(self, m, shifts, **kwargs):
+		return self._shiftMaps(m.index, shifts, **kwargs) if isinstance(m.index, pd.MultiIndex) else self._shiftMap(m.index, shifts, **kwargs)
+
+	@staticmethod
+	def _shiftMaps(idx, shifts, **kwargs):
+		return pd.Series(idx.set_levels([SymMaps._shiftLevelMap(idx, idx.names.index(level), shift, **kwargs) for level,shift in shifts.items()], level = shifts.keys(), verify_integrity=False).values, index = idx)
+
+	@staticmethod
+	def _shiftLevelMap(idx, levelInt, shift, **kwargs):
+		idxLevel = pd.Series(idx.levels[levelInt], idx.levels[levelInt]).convert_dtypes() # allows for NA without breaking type definition
+		return idx.levels[levelInt].map(SymMaps._shiftOptions(idxLevel, shift, **kwargs))
+
+	@staticmethod
+	def _shiftMap(idx, shift, **kwargs):
+		return SymMaps._shiftOptions(pd.Series(idx, idx).convert_dtypes(), shift, **kwargs)
+
+	@staticmethod
+	def _shiftOptions(m, shift, fill_value=None, useLoc = None, useIloc = None):
+		if useLoc == 'nn':
+			return m.shift(shift, fill_value = m.iloc[shift-1 if shift>0 else shift])
+		elif fill_value:
+			return m.shift(shift, fill_value = fill_value)
+		elif useLoc:
+			return m.shift(shift, fill_value = m.loc[useLoc])
+		elif useIloc:
+			return m.shift(shift, fill_value = m.iloc[useIloc])
+		else:
+			return m.shift(shift)
+
+
+### -------- 	2. Ordered set class     -------- ###
 class OrdSet:
 	def __init__(self,i=None):
 		self.v = list(dict.fromkeys(noneInit(i,[])))
@@ -145,6 +303,7 @@ class OrdSet:
 	def copy(self):
 		return OrdSet(self.v.copy())
 
+### -------- 	3. Class used for adjusting pandas objects     -------- ###
 class adj:
 	@staticmethod
 	def rc_AdjPd(symbol, alias = None, lag = None):
