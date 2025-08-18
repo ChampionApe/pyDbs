@@ -5,10 +5,10 @@ with open("README.md", "r") as file:
 
 setuptools.setup(
   name="pyDbs",
-  version="0.0.8",
+  version="0.1.0",
   author="Rasmus K. Skjødt Berg",
   author_email="rasmus.kehlet.berg@econ.ku.dk",
-  description="Custom database class (relies on pandas, scipy)",
+  description="Custom database class (relies on pandas, numpy, scipy)",
   long_description=long_description,
   long_description_content_type="text/markdown",
   url="https://github.com/ChampionApe/pyDbs",
@@ -17,6 +17,6 @@ setuptools.setup(
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
   ],
-  python_requires='>=3.8',
+  python_requires='>=3.11',
   install_requires=["pandas", "scipy","openpyxl"],
 )
