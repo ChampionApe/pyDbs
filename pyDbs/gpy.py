@@ -35,14 +35,14 @@ class GpySet(Gpy_):
 	def array(self, **kwargs):
 		return self.v.values
 
-	def merge(self, symbol, priority = 'second', union = True, **kwargs):
+	def merge(self, symbol, priority = 'first', union = True, **kwargs):
 		if priority == 'replace':
 			self.v = symbol
 		else:
 			self.v = self.v.union(symbol) if union else self.v.intersection(symbol)
 		return self.v
 
-	def mergeGpy(self, symbol, priority = 'second', union = True, **kwargs):
+	def mergeGpy(self, symbol, priority = 'first', union = True, **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
 		return self.merge(symbol.v, priority=priority, union = union, **kwargs)
 
@@ -74,11 +74,11 @@ class GpyVariable(Gpy_):
 		else:
 			return noneInit(getattr(self, attr), np.full(len(self), np.nan))
 
-	def mergeGpy(self, symbol, priority = 'second', **kwargs):
+	def mergeGpy(self, symbol, priority = 'first', **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
 		return self.merge(symbol.v, lo =  symbol.lo, up = symbol.up, priority=priority, **kwargs)
 
-	def merge(self, v, lo = None, up = None, priority = 'second', **kwargs):
+	def merge(self, v, lo = None, up = None, priority = 'first', **kwargs):
 		self.mergeV(v, priority=priority, **kwargs)
 		if lo:
 			self.mergeLo(lo, priority=priority,**kwargs)
@@ -86,7 +86,7 @@ class GpyVariable(Gpy_):
 			self.mergeUp(up, priority=priority,**kwargs)
 		return self.v
 
-	def mergeV(self, symbol, attr = 'v', priority='second', **kwargs):
+	def mergeV(self, symbol, attr = 'v', priority = 'first', **kwargs):
 		if priority == 'second':
 			setattr(self, attr, getattr(self, attr).combine_first(symbol))
 		elif priority == 'first':
@@ -95,7 +95,7 @@ class GpyVariable(Gpy_):
 			setattr(self, attr, symbol)
 		return getattr(self, attr)
 
-	def mergeLo(self, symbol, priority='second', **kwargs):
+	def mergeLo(self, symbol, priority = 'first', **kwargs):
 		if symbol is None:
 			pass
 		elif self.lo is None:
@@ -103,7 +103,7 @@ class GpyVariable(Gpy_):
 		else:
 			return self.mergeV(symbol, attr = 'lo', priority=priority, **kwargs)
 
-	def mergeUp(self, symbol, priority='second', **kwargs):
+	def mergeUp(self, symbol, priority = 'first', **kwargs):
 		if symbol is None:
 			pass
 		elif self.up is None:
@@ -128,10 +128,10 @@ class GpyScalar(Gpy_):
 		return self.v
 	def array(self, attr = 'v', **kwargs):
 		return getattr(self, attr)
-	def mergeGpy(self, symbol, priority = 'second', **kwargs):
+	def mergeGpy(self, symbol, priority = 'first', **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
 		return self.merge(symbol.v, priority=priority, **kwargs)
-	def merge(self, v, priority = 'second', **kwargs):
+	def merge(self, v, priority = 'first', **kwargs):
 		if priority in ('first', 'replace'):
 			self.v = symbol
 		return self.v
