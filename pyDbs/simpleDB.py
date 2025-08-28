@@ -1,6 +1,41 @@
 from pyDbs.gpy import *
 from pyDbs.base import _numtypes
 
+class GpyDict:
+	def __init__(self, symbols = None):
+		""" Simple keyword database with gpy symbols. 
+			Slightly different logic than SimpleDB, as it allows for key!=self.symbols[key].name"""
+		self.symbols = noneInit(symbols, {})
+
+	def __getitem__(self,item):
+		return self.symbols[item]
+
+	def __setitem__(self,item,value):
+		""" Add gpy directly with itentifier item:str, or using item:tuple. """
+		if isinstance(value, Gpy_):
+			self.symbols[item] = value
+		elif isinstance(item, str):
+			self.symbols[item] = Gpy.c(value, name = item)
+		else:
+			self.symbols[item[0]] = Gpy.c(value, name = item[1])
+
+	def __call__(self, item, attr = 'v'):
+		return getattr(self[item], attr)
+
+	def set(self, item, value, **kwargs):
+		""" Akin to setitem, but passes **kwargs to the Gpy.c function. """
+		self.symbols[item[0]] = Gpy.c(value, name = item[1], **kwargs)
+
+	def __iter__(self):
+		return iter(self.symbols.values())
+
+	def __delitem__(self,item):
+		del(self.symbols[item])
+
+	def __len__(self):
+		return len(self.symbols)
+
+
 class SimpleDB:
 	def __init__(self, name = None, symbols = None, alias = None):
 		self.name = name
@@ -49,41 +84,32 @@ class SimpleDB:
 			raise TypeError(f"{x} is not aliased")
 
 	def __getitem__(self,item):
-		try:
-			return self.symbols[item]
-		except KeyError:
-			try:
-				return self.symbols[self.getAlias(item)].rename(item)
-			except TypeError:
-				raise TypeError(f"Symbol {item} not in database")
+		return self.symbols[item]
 
 	def __setitem__(self,item,value):
-		self.symbols[item] = value
-
-	def get(self, var, attr = 'v'):
-		""" Return attribute from Gpy symbol"""
-		return getattr(self[var], attr)
-
-	def set(self, var, value, attr = 'v', **kwargs):
-		try:
-			setattr(getattr(self[var], attr), value)
-		except KeyError:
-			self[var] = Gpy.c(value, **kwargs)
-
-	def aom(self, name, symbol, **kwargs):
-		if name in self.symbols:
-			self[name].merge(symbol, **kwargs)
+		if isinstance(value, Gpy_):
+			self.symbols[item] = value
 		else:
-			self[name] = Gpy.c(symbol, **kwargs)
+			self.symbols[item] = Gpy.c(value, name = item)
 
-	def aomGpy(self, name, symbol, **kwargs):
-		if name in self.symbols:
-			self[name].mergeGpy(symbol, **kwargs)
+	def __call__(self, item, attr = 'v'):
+		return getattr(self[item], attr)
+
+	def set(self, item, value, **kwargs):
+		self[item] = Gpy.c(value, name = item, **kwargs)
+
+	def aom(self, symbol, **kwargs):
+		gpyInst = Gpy.c(symbol,**kwargs)
+		self.aomGpy(gpyInst, **kwargs)
+
+	def aomGpy(self, symbol, **kwargs):
+		if symbol.name in self.symbols:
+			self[symbol.name].mergeGpy(symbol, **kwargs)
 		else:
-			self[name] = symbol
+			self[symbol.name] = symbol
 
 	def mergeDbs(self, dbOther, **kwargs):
-		[self.aomGpy(name, symbol, **kwargs) for name, symbol in dbOther.symbols.items()];
+		[self.aomGpy(symbol, **kwargs) for symbol in dbOther.symbols.values()];
 
 	def readSets(self, types = None):
 		""" Read sets from database symbols """

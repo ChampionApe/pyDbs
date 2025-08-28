@@ -11,8 +11,6 @@ def type_(s):
 		return 'scalar'
 
 class Gpy_:
-	def __init__(self, symbol, **kwargs):
-		self.initFromSym(symbol, **kwargs)
 	def __len__(self):
 		return len(self.v)
 	@property
@@ -26,13 +24,16 @@ class Gpy_:
 		return self.v
 
 class GpySet(Gpy_):
-	def initFromSym(self, symbol, name = None, **kwargs):
+	def __init__(self, symbol = None, name = None, **kwargs):
 		self.v = symbol
 		self.name = noneInit(name, self.v.name)
 		self.type ='set'
 	@property
 	def index(self):
 		return self.v
+
+	def array(self, **kwargs):
+		return self.v.values
 
 	def merge(self, symbol, priority = 'second', union = True, **kwargs):
 		if priority == 'replace':
@@ -46,7 +47,7 @@ class GpySet(Gpy_):
 		return self.merge(symbol.v, priority=priority, union = union, **kwargs)
 
 class GpyVariable(Gpy_):
-	def initFromSym(self, symbol, name = None, **kwargs):
+	def __init__(self, symbol = None, name = None, **kwargs):
 		if isinstance(symbol, pd.Series):
 			self.v = symbol
 			self.lo = None
@@ -66,6 +67,12 @@ class GpyVariable(Gpy_):
 		if self.up is not None:
 			self.up = _adjF(self.up, rc, **kwargs)
 		return super().adj(rc, **kwargs)
+
+	def array(self, attr = 'v', **kwargs):
+		if attr == 'v':
+			return self.v.values
+		else:
+			return noneInit(getattr(self, attr), np.full(len(self), np.nan))
 
 	def mergeGpy(self, symbol, priority = 'second', **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
@@ -105,12 +112,12 @@ class GpyVariable(Gpy_):
 			return self.mergeV(symbol, attr = 'up', priority=priority, **kwargs)
 
 class GpyScalar(Gpy_):
-	def initFromSym(self, symbol, lo = None, up = None, name = None, **kwargs):
+	def __init__(self, symbol = None, lo = None, up = None, name = None, **kwargs):
 		self.v = symbol
 		self.lo = lo
 		self.up = up
 		self.name = name
-		self.type ='scalarPar'
+		self.type ='scalar'
 	@property
 	def index(self):
 		return None
@@ -119,19 +126,19 @@ class GpyScalar(Gpy_):
 		return []
 	def adj(self, rc, **kwargs):
 		return self.v
-
+	def array(self, attr = 'v', **kwargs):
+		return getattr(self, attr)
 	def mergeGpy(self, symbol, priority = 'second', **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
 		return self.merge(symbol.v, priority=priority, **kwargs)
-
 	def merge(self, v, priority = 'second', **kwargs):
 		if priority in ('first', 'replace'):
 			self.v = symbol
 		return self.v
 
 
-
 _GpyClasses = {'variable': GpyVariable, 'scalar': GpyScalar, 'set': GpySet}
+
 class Gpy(Gpy_):
 	""" Convenience class. """
 	@staticmethod
@@ -148,4 +155,3 @@ class Gpy(Gpy_):
 	def create(version: str, *args, **kwargs):
 		cls = _GpyClasses[version]
 		return cls(*args, **kwargs)
-
