@@ -218,49 +218,47 @@ class Broadcast:
 			return cartesianProductIndex([x, y])
 
 	@staticmethod
-	def seriesToIdx(series, idx, how = 'left'):
+	def seriesToIdx(series, idx, fIdx = False, how = 'inner'):
 		""" 
 		Broadcast a Series (indexed by Index or MultiIndex) to align with idx.
 		Values from `series` are repeated across the new dimensions as appropriate
 		(i.e., Cartesian expansion along dimensions that series doesn't have).
-		Assumes that dimensions in series overlaps with domains in idx.
+		If dimensions in series does not overlap with idx, broadcast to 
+		cartesian product of the two. If 'fIdx' is True, we assume that the
+		index 'idx' has already been broadcasted to suitable domains.
 
 		Parameters
 		----------
 		series : pd.Series 
 		idx : pd.MultiIndex (or Index)
+		fIdx: bool. 
 
 		Returns
 		-------
 		broadcasted_series : pd.Series 
 		"""
-		dfSeries = series.to_frame(name='_values_').reset_index()
-		overlap = [d for d in series.index.names if d in idx.names]
-		if not overlap:
-			raise ValueError("Series has no common index names with idx." 
-							 "Broadcasting requires reconciling what values in series are mapped to domains in idx.")
-		df = pd.merge(idx.to_frame(index=False), dfSeries, on = overlap, how = how)
-		fullDomains = list(idx.names)+[name for name in series.index.names if name not in overlap]
-		if len(fullDomains)==1:
-			return pd.Series(df['_values_'].values, index = pd.Index(df.iloc[:,0], name = idx.name), name = series.name)
+		fIdx = idx if fIdx else Broadcast.idx(series.index, idx, how = how)
+		df = pd.merge(fIdx.to_frame(index=False), series.to_frame(name='_values_').reset_index(), on = series.index.names, how = how)
+		if isinstance(fIdx, pd.MultiIndex):
+			return pd.Series(df['_values_'].values, index = pd.MultiIndex.from_frame(df[fIdx.names]), name = series.name)
 		else:
-			return pd.Series(df['_values_'].values, index = pd.MultiIndex.from_frame(df[fullDomains]), name = series.name)
+			return pd.Series(df['_values_'].values, index = pd.Index(df.iloc[:,0], name = idx.name), name = series.name)
 
 	@staticmethod
 	def series(x, y, how = 'inner'):
 		""" Broadcast, x,y to common index/multiindex. Return both."""
 		idx = Broadcast.idx(x.index, y.index, how = how)
-		return Broadcast.seriesToIdx(x, idx), Broadcast.seriesToIdx(y, idx)
+		return Broadcast.seriesToIdx(x, idx, fIdx = True), Broadcast.seriesToIdx(y, idx, fIdx = True)
 
 
 	@staticmethod
-	def valuesToIdx(values, idx, how = 'left'):
+	def valuesToIdx(values, idx, fIdx = False, how = 'left'):
 		"""
 		If isinstance(values, pd.Series) --> use seriesToIdx.
 		If values is not an iterable (or string) --> return pd.Series(values, index = idx)  
 		"""
 		if isinstance(values, pd.Series):
-			return Broadcast.seriesToIdx(values, idx, how = how)
+			return Broadcast.seriesToIdx(values, idx, fIdx = fIdx, how = how)
 		elif not is_iterable(values):
 			return pd.Series(values, index = idx)
 		else:
@@ -341,7 +339,7 @@ class ExcelSymbolLoader:
 		for _, row in self._readme.iterrows():
 			sheet = str(row["Sheet"])
 			typ = str(row["Type"]).strip().lower()
-			unit = row.get("Unit", None)
+			unit = row.get("Unit", None)	
 			desc = row.get("Description", None)
 			idx_doc = row.get("Index", None)  # doc only; not used for construction
 
