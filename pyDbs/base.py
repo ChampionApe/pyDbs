@@ -107,7 +107,7 @@ class adj:
 		if lag:
 			if isinstance(index_,pd.MultiIndex):
 				return index_.set_levels([index_.levels[index_.names.index(k)]+v for k,v in lag.items()], level=lag.keys())
-			elif list(index_.domains)==list(lag.keys()):
+			elif list(index_.names)==list(lag.keys()):
 				return index_+list(lag.values())[0]
 		else:
 			return index_

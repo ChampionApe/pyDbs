@@ -55,7 +55,7 @@ class GpyVariable(Gpy_):
 		elif isinstance(symbol, pd.DataFrame):
 			self.v = symbol['v']
 			self.lo = symbol['lo'] if 'lo' in symbol.columns else None
-			self.up = symbol['up'] if' up' in symbol.columns else None
+			self.up = symbol['up'] if 'up' in symbol.columns else None
 		else:
 			raise TypeError(f"Can only initialize variable with pd.Series or pd.DataFrame")
 		self.name = noneInit(name, self.v.name)
@@ -72,7 +72,7 @@ class GpyVariable(Gpy_):
 		if attr == 'v':
 			return self.v.values
 		else:
-			return noneInit(getattr(self, attr), np.full(len(self), np.nan))
+			return np.full(len(self), np.nan) if getattr(self, attr) is None else getattr(self, attr).values
 
 	def mergeGpy(self, symbol, priority = 'first', **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
@@ -80,9 +80,9 @@ class GpyVariable(Gpy_):
 
 	def merge(self, v, lo = None, up = None, priority = 'first', **kwargs):
 		self.mergeV(v, priority=priority, **kwargs)
-		if lo:
+		if lo is not None:
 			self.mergeLo(lo, priority=priority,**kwargs)
-		if up:
+		if up is not None:
 			self.mergeUp(up, priority=priority,**kwargs)
 		return self.v
 
@@ -128,17 +128,45 @@ class GpyScalar(Gpy_):
 		return self.v
 	def array(self, attr = 'v', **kwargs):
 		return getattr(self, attr)
+
 	def mergeGpy(self, symbol, priority = 'first', **kwargs):
 		""" Update self.v from Gpy instance of similar subclass type"""
-		return self.merge(symbol.v, priority=priority, **kwargs)
+		return self.merge(symbol.v, lo =  symbol.lo, up = symbol.up, priority=priority, **kwargs)
+
 	def merge(self, v, priority = 'first', **kwargs):
 		if priority in ('first', 'replace'):
 			self.v = symbol
 		return self.v
 
+	def merge(self, v, lo = None, up = None, priority = 'first', **kwargs):
+		self.mergeV(v, priority=priority, **kwargs)
+		if lo is not None:
+			self.mergeLo(lo, priority=priority,**kwargs)
+		if up is not None:
+			self.mergeUp(up, priority=priority,**kwargs)
+		return self.v
+
+	def mergeV(self, symbol, attr = 'v', priority = 'first', **kwargs):
+		if priority in ('first','replace'):
+			setattr(self, attr, symbol)
+		elif getattr(self, attr) is None:
+			setattr(self, attr, symbol)			
+		return getattr(self,attr)
+
+	def mergeLo(self, symbol, attr = 'lo', priority = 'first', **kwargs):
+		if symbol is None:
+			pass
+		else:
+			return self.mergeV(symbol, attr = 'lo', priority=priority, **kwargs)
+
+	def mergeUp(self, symbol, attr = 'up', priority = 'first', **kwargs):
+		if symbol is None:
+			pass
+		else:
+			return self.mergeV(symbol, attr = 'up', priority=priority, **kwargs)
+
 
 _GpyClasses = {'variable': GpyVariable, 'scalar': GpyScalar, 'set': GpySet}
-
 class Gpy(Gpy_):
 	""" Convenience class. """
 	@staticmethod

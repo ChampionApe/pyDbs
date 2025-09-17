@@ -59,10 +59,10 @@ class SimpleDB:
 		obj.__dict__.update(deepcopy(self.__dict__).items())
 		return obj
 
-	def getTypes(self,types=['variable']):
-		return {k:v for k,v in self.symbols.items() if v.type in types}
+	def getTypes(self,types=None):
+		return {k:v for k,v in self.symbols.items() if v.type in noneInit(types, ['variable'])}
 
-	def getDomains(self, setName, types = ['variable']):
+	def getDomains(self, setName, types = None):
 		return {k:v for k,v in self.getTypes(types).items() if setName in v.domains}
 
 	@property
@@ -113,4 +113,6 @@ class SimpleDB:
 
 	def readSets(self, types = None):
 		""" Read sets from database symbols """
-		[self.aom(set_, symbol.index.get_level_values(set_).unique()) for symbol in self.getTypes(noneInit(types,['variable'])).values() for set_ in symbol.domains];
+		[self.aom(set_, symbol.index.get_level_values(set_).unique()) for symbol in self.getTypes(types).values() for set_ in symbol.domains];
+
+	
